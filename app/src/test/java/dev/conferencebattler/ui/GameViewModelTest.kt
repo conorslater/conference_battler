@@ -26,7 +26,7 @@ class GameViewModelTest {
         vm.scanItem(1, p2)
         vm.itemScanned(1, p2, "https://example.com")
         val card = vm.screen as Screen.ItemCard
-        vm.ready(1, if (p2.canEquip(card.item)) p2.equip(card.item) else p2)
+        vm.ready(1, p2.equip(card.item))
 
         val battle = (vm.screen as Screen.Battle).state
         assertEquals("ADA LOVELACE", battle.left.character.name)

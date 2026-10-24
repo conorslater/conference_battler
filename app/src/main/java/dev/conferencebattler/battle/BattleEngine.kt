@@ -47,7 +47,7 @@ data class BattleState(
  *
  * - First attacker: flipCoin().
  * - Hit: generateRnd(256) < 204 (~80%).
- * - Damage: ST includes the equipped item. a = 2*ST + ST*r/10 with r from {0,2,4,6,8}. If
+ * - Damage: ST and DF include equipped items. a = 2*ST + ST*r/10 with r from {0,2,4,6,8}. If
  *   a < DF, damage is 100. Otherwise it is (a - DF)/2 + 100. Then ×2 for the timing bonus,
  *   rounded down to the nearest 100.
  *
@@ -73,7 +73,7 @@ class BattleEngine(private val rng: DiabloRandom) {
         val side = state.turn
         val defender = state.fighter(side.other)
         val st = state.fighter(side).character.totalSt
-        val df = defender.character.df
+        val df = defender.character.totalDf
 
         val hit = rng.generateRnd(256) < HIT_CHANCE
         var damage = 0

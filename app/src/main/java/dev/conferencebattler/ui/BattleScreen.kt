@@ -33,7 +33,6 @@ import androidx.compose.ui.unit.dp
 import dev.conferencebattler.battle.BattleState
 import dev.conferencebattler.battle.Fighter
 import dev.conferencebattler.battle.Side
-import dev.conferencebattler.model.CharClass
 
 /**
  * Landscape battle screen, laid out like the sketch:
@@ -101,16 +100,17 @@ private fun FighterPanel(state: BattleState, side: Side, modifier: Modifier) {
             textAlign = TextAlign.Center,
             maxLines = 2,
         )
+        Text(c.rank, style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center, maxLines = 1)
         Text(
-            c.item?.name ?: "${c.charClass.label}, unarmed",
+            c.item?.let { "${it.name} (${it.kind.stat} +${it.bonus})" } ?: "Empty-handed",
             style = MaterialTheme.typography.bodySmall,
             textAlign = TextAlign.Center,
-            maxLines = 1,
+            maxLines = 2,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
             if (side == Side.LEFT) Stats(fighter)
             Box(contentAlignment = Alignment.Center) {
-                Figure(c.charClass)
+                Figure(side)
                 HitMarker(state, side)
             }
             if (side == Side.RIGHT) Stats(fighter)
@@ -126,14 +126,14 @@ private fun Stats(fighter: Fighter) {
         Text("HP ${fighter.hp}", style = MaterialTheme.typography.titleMedium)
         LinearProgressIndicator({ fighter.hp.toFloat() / c.hp }, Modifier.fillMaxWidth())
         Text("ST ${c.totalSt}")
-        Text("DF ${c.df}")
+        Text("DF ${c.totalDf}")
     }
 }
 
-/** Circle head over a rectangle body, as in the sketch. Red for warriors, blue for wizards. */
+/** Circle head over a rectangle body, as in the sketch. Red for player 1, blue for player 2. */
 @Composable
-private fun Figure(charClass: CharClass) {
-    val color = if (charClass == CharClass.WARRIOR) Color(0xFFC62828) else Color(0xFF1565C0)
+private fun Figure(side: Side) {
+    val color = if (side == Side.LEFT) Color(0xFFC62828) else Color(0xFF1565C0)
     Canvas(Modifier.size(width = 70.dp, height = 110.dp)) {
         val head = size.width * 0.3f
         drawCircle(color, radius = head, center = Offset(size.width / 2, head))

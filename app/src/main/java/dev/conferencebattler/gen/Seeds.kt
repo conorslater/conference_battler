@@ -14,7 +14,7 @@ import java.util.Locale
  * existing stats: bump [SEED_VERSION] and every badge rerolls on purpose.
  */
 object Seeds {
-    const val SEED_VERSION = 1
+    const val SEED_VERSION = 2
     const val BADGE = "BADGE"
     const val ITEM = "ITEM"
 

@@ -30,7 +30,7 @@ fun QrScanScreen(title: String, onResult: (String) -> Unit, onSkip: () -> Unit, 
 
     ScanLayout(title, analyzer, onCancel) {
         Text(
-            "Point the camera at any QR code. It becomes a weapon or a spell.",
+            "Point the camera at any QR code. It becomes a piece of conference swag.",
             Modifier.weight(1f),
             color = Color.White,
         )

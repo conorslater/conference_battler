@@ -22,7 +22,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.conferencebattler.model.Character
 import dev.conferencebattler.model.Item
-import dev.conferencebattler.model.ItemKind
 
 @Composable
 fun TitleScreen(onStart: () -> Unit, onDebug: () -> Unit) {
@@ -32,7 +31,7 @@ fun TitleScreen(onStart: () -> Unit, onDebug: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text("Conference Battler", style = MaterialTheme.typography.displaySmall)
-        Text("Scan your badges. Scan a QR code for a weapon or spell. Fight!")
+        Text("Scan your badges. Scan a QR code for some conference swag. Fight!")
         Button(onStart) { Text("New game") }
         TextButton(onDebug) { Text("Generator test") }
     }
@@ -53,8 +52,7 @@ fun CharacterCardScreen(
             Text(describe(character), style = MaterialTheme.typography.titleMedium)
             Text(statsLine(character), style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.height(8.dp))
-            val kind = ItemKind.entries.first { it.usableBy == character.charClass }
-            Text("Scan a QR code to equip a ${kind.label.lowercase()}, or skip.")
+            Text("Scan a QR code to grab some swag for attack or defence, or skip.")
         },
         actions = {
             Button(onScanItem, Modifier.fillMaxWidth()) { Text("Scan QR code") }
@@ -75,24 +73,16 @@ fun ItemCardScreen(
     onBack: () -> Unit,
 ) {
     BackHandler(onBack = onBack)
-    val usable = character.canEquip(item)
     CardLayout(
         heading = "${playerLabel(player)} found: ${item.name}",
         info = {
             Text(describe(item), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
-            if (usable) {
-                Text(character.title, fontWeight = FontWeight.Bold)
-                Text("With it: ${statsLine(character.equip(item))}", style = MaterialTheme.typography.headlineSmall)
-            } else {
-                Text(
-                    "Only ${item.kind.usableBy.label.lowercase()}s can use a ${item.kind.label.lowercase()}. " +
-                        "${character.title} is a ${character.charClass.label.lowercase()}.",
-                )
-            }
+            Text(character.title, fontWeight = FontWeight.Bold)
+            Text("With it: ${statsLine(character.equip(item))}", style = MaterialTheme.typography.headlineSmall)
         },
         actions = {
-            if (usable) Button(onEquip, Modifier.fillMaxWidth()) { Text("Equip") }
+            Button(onEquip, Modifier.fillMaxWidth()) { Text("Equip") }
             OutlinedButton(onScanAnother, Modifier.fillMaxWidth()) { Text("Scan another") }
             OutlinedButton(onSkip, Modifier.fillMaxWidth()) { Text("Skip") }
         },

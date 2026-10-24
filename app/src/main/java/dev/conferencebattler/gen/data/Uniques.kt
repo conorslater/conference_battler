@@ -10,20 +10,20 @@ const val UNIQUE_CHANCE = 200
 private const val UNIQUE_LEVEL = 30
 
 private val uniqueStats = mapOf(
-    ItemKind.WEAPON to listOf(
-        "The Butcher's Cleaver" to 3000,
-        "The Grandfather" to 3500,
-        "Messerschmidt's Reaver" to 3200,
-        "Black Razor" to 2800,
+    ItemKind.ATTACK to listOf(
+        "The CEO's Fountain Pen" to 3000,
+        "Triple-shot Espresso" to 3500,
+        "The Golden Clicker" to 3200,
+        "Last Box of Conference Donuts" to 2800,
     ),
-    ItemKind.SPELL to listOf(
-        "Horazon's Inferno" to 3800,
-        "Zhar's Storm" to 3400,
-        "Gharbad's Folly" to 4200,
+    ItemKind.DEFENCE to listOf(
+        "All-access Backstage Pass" to 2400,
+        "The Sponsor's Gilet" to 2000,
+        "Fully Charged Power Bank" to 2800,
     ),
 )
 
 fun uniques(kind: ItemKind, seed: UInt): List<Item> =
-    uniqueStats.getValue(kind).map { (name, st) ->
-        Item(kind, name, seed, UNIQUE_LEVEL, Rarity.UNIQUE, stBonus = st)
+    uniqueStats.getValue(kind).map { (name, bonus) ->
+        Item(kind, name, seed, UNIQUE_LEVEL, Rarity.UNIQUE, bonus = bonus)
     }

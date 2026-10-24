@@ -18,8 +18,8 @@ fun Modifier.screenPadding(): Modifier =
 
 fun playerLabel(player: Int) = "Player ${player + 1}"
 
-fun statsLine(c: Character) = "HP ${c.hp}   ST ${c.totalSt}   DF ${c.df}"
+fun statsLine(c: Character) = "HP ${c.hp}   ST ${c.totalSt}   DF ${c.totalDf}"
 
-fun describe(c: Character) = "${c.tier.label} ${c.charClass.label}"
+fun describe(c: Character) = c.rank
 
-fun describe(item: Item) = "${item.rarity.label} ${item.kind.label}  ·  ST +${item.stBonus}"
+fun describe(item: Item) = "${item.rarity.label}  ·  ${item.kind.label}: ${item.kind.stat} +${item.bonus}"

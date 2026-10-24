@@ -73,9 +73,9 @@ private fun StatsText(text: String) {
 
 private fun debugText(c: Character) = """
     ${c.title}
-    ${c.tier.label} ${c.charClass.label}  seed=${c.seed.toString(16)}
+    ${c.rank}  seed=${c.seed.toString(16)}
     HP ${c.hp}  ST ${c.st}  DF ${c.df}
 """.trimIndent()
 
 private fun debugText(item: Item) =
-    "${item.name} (${item.kind.label}, ${item.rarity.label}, lvl ${item.level})\nST +${item.stBonus}"
+    "${item.name} (${item.kind.label}, ${item.rarity.label}, lvl ${item.level})\n${item.kind.stat} +${item.bonus}"

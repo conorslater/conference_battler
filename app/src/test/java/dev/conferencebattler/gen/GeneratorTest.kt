@@ -1,9 +1,8 @@
 package dev.conferencebattler.gen
 
-import dev.conferencebattler.model.CharClass
-import dev.conferencebattler.model.Rarity
+import dev.conferencebattler.gen.data.Roles
 import dev.conferencebattler.model.ItemKind
-import dev.conferencebattler.model.Tier
+import dev.conferencebattler.model.Rarity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -26,27 +25,32 @@ class GeneratorTest {
     }
 
     @Test
-    fun classSplitIsRoughlyEven() {
-        val warriors = names.count { CharacterGenerator.generate(it).charClass == CharClass.WARRIOR }
-        assertTrue("warriors=$warriors", warriors in 4_500..5_500)
+    fun roleWeightsMatch() {
+        val counts = names.groupingBy { CharacterGenerator.generate(it).role }.eachCount()
+        val total = Roles.sumOf { it.weight }
+        for (role in Roles) {
+            val expected = names.size * role.weight / total
+            val actual = counts[role.name] ?: 0
+            assertTrue("${role.name}=$actual, expected ~$expected", actual in expected * 6 / 10..expected * 14 / 10 + 20)
+        }
     }
 
     @Test
-    fun tierWeightsMatch() {
-        val counts = names.groupingBy { CharacterGenerator.generate(it).tier }.eachCount()
-        assertTrue("common=${counts[Tier.COMMON]}", counts.getValue(Tier.COMMON) in 5_500..6_500)
-        assertTrue("veteran=${counts[Tier.VETERAN]}", counts.getValue(Tier.VETERAN) in 2_600..3_400)
-        assertTrue("champion=${counts[Tier.CHAMPION]}", counts.getValue(Tier.CHAMPION) in 650..1_150)
-        assertTrue("legend=${counts[Tier.LEGEND]}", counts.getValue(Tier.LEGEND) in 40..180)
+    fun lowLevelsAreMostCommon() {
+        val counts = names.groupingBy { CharacterGenerator.generate(it).level }.eachCount()
+        assertEquals((1..CharacterGenerator.MAX_LEVEL).toSet(), counts.keys)
+        // Level 1 has weight 20 out of 210 (~950 in 10k), level 20 has weight 1 (~48).
+        assertTrue("level1=${counts[1]}", counts.getValue(1) in 800..1_100)
+        assertTrue("level20=${counts[20]}", counts.getValue(20) in 15..100)
     }
 
     @Test
     fun characterStatsStayInRange() {
         for (name in names) {
             val c = CharacterGenerator.generate(name)
-            assertTrue(c.toString(), c.hp in 100..40_000 && c.hp % 100 == 0)
-            assertTrue(c.toString(), c.st in 100..9_900 && c.st % 100 == 0)
-            assertTrue(c.toString(), c.df in 0..9_900 && c.df % 100 == 0)
+            assertTrue(c.toString(), c.hp in 100..50_000 && c.hp % 100 == 0)
+            assertTrue(c.toString(), c.st in 100..19_900 && c.st % 100 == 0)
+            assertTrue(c.toString(), c.df in 0..19_900 && c.df % 100 == 0)
             assertTrue(c.toString(), c.title.isNotBlank())
         }
     }
@@ -54,11 +58,11 @@ class GeneratorTest {
     @Test
     fun itemsCoverBothKindsAndStayInRange() {
         val items = payloads.map { ItemGenerator.generate(it) }
-        val weapons = items.count { it.kind == ItemKind.WEAPON }
-        assertTrue("weapons=$weapons", weapons in 4_500..5_500)
+        val attacks = items.count { it.kind == ItemKind.ATTACK }
+        assertTrue("attacks=$attacks", attacks in 4_500..5_500)
         assertTrue(items.any { it.rarity == Rarity.MAGIC })
         assertTrue(items.any { it.rarity == Rarity.NORMAL })
-        for (item in items) assertTrue(item.toString(), item.stBonus in 0..9_900 && item.stBonus % 100 == 0)
+        for (item in items) assertTrue(item.toString(), item.bonus in 0..9_900 && item.bonus % 100 == 0)
     }
 
     @Test

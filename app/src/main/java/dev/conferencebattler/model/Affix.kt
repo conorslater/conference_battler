@@ -15,9 +15,9 @@ enum class AffixPower {
     DF_PCT,
     ALL_PCT,
 
-    // Items: percentage of the base ST bonus, or a flat amount added to it.
-    DAMAGE_PCT,
-    ST_FLAT,
+    // Items: percentage of the base bonus, or a flat amount added to it.
+    BONUS_PCT,
+    BONUS_FLAT,
 }
 
 /**

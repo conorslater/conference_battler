@@ -15,10 +15,7 @@ class BattleEngineTest {
     private val characters = (0 until 200).map { CharacterGenerator.generate("FIGHTER $it") }
     private val items = (0 until 2_000).map { ItemGenerator.generate("qr $it") }
 
-    private fun armed(c: Character): Character {
-        val usable = items.filter { c.canEquip(it) }
-        return c.equip(usable[c.seed.toInt().mod(usable.size)])
-    }
+    private fun armed(c: Character): Character = c.equip(items[c.seed.toInt().mod(items.size)])
 
     private fun play(engine: BattleEngine, left: Character, right: Character): BattleState {
         var state = engine.start(left, right)
@@ -67,19 +64,18 @@ class BattleEngineTest {
     }
 
     @Test
-    fun itemAddsToSt() {
+    fun attackItemAddsToSt() {
         val c = characters[6]
-        val item = items.first { c.canEquip(it) && it.stBonus > 0 }
-        assertEquals(c.st + item.stBonus, c.equip(item).totalSt)
+        val item = items.first { it.kind == ItemKind.ATTACK && it.bonus > 0 }
+        assertEquals(c.st + item.bonus, c.equip(item).totalSt)
+        assertEquals(c.df, c.equip(item).totalDf)
     }
 
     @Test
-    fun classRestrictsItemKind() {
-        for (c in characters) {
-            for (kind in ItemKind.entries) {
-                val item = items.first { it.kind == kind }
-                assertEquals(kind.usableBy == c.charClass, c.canEquip(item))
-            }
-        }
+    fun defenceItemAddsToDf() {
+        val c = characters[6]
+        val item = items.first { it.kind == ItemKind.DEFENCE && it.bonus > 0 }
+        assertEquals(c.df + item.bonus, c.equip(item).totalDf)
+        assertEquals(c.st, c.equip(item).totalSt)
     }
 }
