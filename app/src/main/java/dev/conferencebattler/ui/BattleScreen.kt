@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -52,14 +53,17 @@ import androidx.compose.ui.unit.sp
 import dev.conferencebattler.battle.BattleState
 import dev.conferencebattler.battle.Side
 import dev.conferencebattler.battle.TurnResult
-import dev.conferencebattler.ui.fighter.Move
+import dev.conferencebattler.ui.fighter.Guard
+import dev.conferencebattler.ui.fighter.Motion
 import dev.conferencebattler.ui.fighter.Moves
-import dev.conferencebattler.ui.fighter.Pose
+import dev.conferencebattler.ui.fighter.Ragdoll
 import dev.conferencebattler.ui.fighter.Skeleton
 import dev.conferencebattler.ui.fighter.Vec
 import dev.conferencebattler.ui.fighter.drawFighter
 import dev.conferencebattler.ui.fighter.lookFor
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.cos
@@ -116,6 +120,9 @@ private val SIDE_RESERVE = 150.dp
 private val FLOOR_MARGIN = 44.dp
 
 private fun playerColor(side: Side) = if (side == Side.LEFT) Color(0xFFC62828) else Color(0xFF1565C0)
+
+/** A lighter [playerColor], for text on the dark hall. */
+private fun playerLight(side: Side) = if (side == Side.LEFT) Color(0xFFEF9A9A) else Color(0xFF90CAF9)
 
 /** The health bar drains from the middle outwards, with a red trail that catches up. */
 @Composable
@@ -209,7 +216,7 @@ private fun Banner(state: BattleState, onRematch: () -> Unit, onNewGame: () -> U
                 playerLabel(state.turn.ordinal) + if (state.last == null) " goes first!" else "'s turn",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = if (state.turn == Side.LEFT) Color(0xFFEF9A9A) else Color(0xFF90CAF9),
+                color = playerLight(state.turn),
             )
         }
     }
@@ -249,23 +256,35 @@ private fun Stage(state: BattleState, anim: BattleAnimation, modifier: Modifier)
         fun toCanvas(side: Side, v: Vec) =
             origins.getValue(side).let { Offset(it.x + facing(side) * v.x * h, it.y - v.y * h) }
 
-        // The attacker goes on top so the punch lands in front of the defender.
-        val front = state.last?.attacker ?: Side.LEFT
-        for (side in listOf(front.other, front)) {
-            val actor = anim.actor(side)
-            val idlePhase = if (side == Side.LEFT) phase else (phase + 0.5f) % 1f
-            drawFighter(looks.getValue(side), actor.pose(idlePhase), origins.getValue(side), h, facing(side), actor.flash.value)
+        // A finisher shakes the fighters (not the hall, so its edges stay put).
+        val shake = anim.shake.value
+        translate(left = 6.dp.toPx() * shake * sin(shake * 60f), top = 3.dp.toPx() * shake * cos(shake * 50f)) {
+            // The attacker goes on top so the punch lands in front of the defender.
+            val front = state.last?.attacker ?: Side.LEFT
+            for (side in listOf(front.other, front)) {
+                val actor = anim.actor(side)
+                val idlePhase = if (side == Side.LEFT) phase else (phase + 0.5f) % 1f
+                drawFighter(looks.getValue(side), actor.skeleton(idlePhase), origins.getValue(side), h, facing(side), actor.flash.value)
+            }
+
+            val impact = anim.impact ?: return@translate
+            val t = anim.impactTime.value
+            if (impact.strike != null && t < 0.3f) {
+                val big = if (impact.label != null) 1.6f else 1f
+                drawSpark(toCanvas(impact.attacker, impact.strike), big * h * (0.08f + 0.25f * t), alpha = 1 - t / 0.3f)
+            }
+            if (impact.label != null) {
+                // Where the defender's head was, since the head itself may be flying away.
+                val at = toCanvas(impact.attacker.other, Skeleton(Guard).head + Vec(0f, 0.2f + 0.15f * t))
+                val alpha = if (t < 0.6f) 1f else (1 - t) / 0.4f
+                drawLabel(text, impact.label, at, impact.color.copy(alpha = alpha))
+            }
         }
 
-        val impact = anim.impact ?: return@Canvas
-        val t = anim.impactTime.value
-        if (impact.strike != null && t < 0.3f) {
-            drawSpark(toCanvas(impact.attacker, impact.strike), h * (0.08f + 0.25f * t), alpha = 1 - t / 0.3f)
+        if (anim.busy && anim.hits >= 2) {
+            val attacker = state.last?.attacker ?: return@Canvas
+            drawLabel(text, "${anim.hits} HIT COMBO!", Offset(size.width / 2, 130.dp.toPx()), playerLight(attacker))
         }
-        val head = Skeleton(anim.actor(impact.attacker.other).pose(0f)).head
-        val at = toCanvas(impact.attacker.other, head + Vec(0f, 0.2f + 0.15f * t))
-        val alpha = if (t < 0.6f) 1f else (1 - t) / 0.4f
-        drawLabel(text, impact.label, at, impact.color.copy(alpha = alpha))
     }
 }
 
@@ -304,9 +323,9 @@ private fun DrawScope.drawLabel(text: TextMeasurer, label: String, centre: Offse
     drawText(layout, topLeft = Offset(centre.x - layout.size.width / 2, centre.y - layout.size.height))
 }
 
-/** One fighter's animation state. With no [move] they breathe in the guard stance. */
+/** One fighter's animation state. With no [motion] they breathe in the guard stance. */
 private class Actor(hp: Int) {
-    var move by mutableStateOf<Move?>(null)
+    var motion by mutableStateOf<Motion?>(null)
     val time = Animatable(0f)
     /** The yellow bar, which drops on impact. */
     val hp = Animatable(hp.toFloat())
@@ -314,16 +333,24 @@ private class Actor(hp: Int) {
     val chip = Animatable(hp.toFloat())
     val flash = Animatable(0f)
 
-    fun pose(idlePhase: Float): Pose = move?.at(time.value) ?: Moves.idle(idlePhase)
+    fun skeleton(idlePhase: Float): Skeleton = motion?.at(time.value) ?: Skeleton(Moves.idle(idlePhase))
 
-    suspend fun perform(move: Move, durationMillis: Int, until: Float = move.end) {
-        this.move = move
+    suspend fun perform(motion: Motion, durationMillis: Int, until: Float = motion.end) {
+        this.motion = motion
         time.snapTo(0f)
         time.animateTo(until, tween(durationMillis, easing = LinearEasing))
     }
 
+    /** Plays on from wherever [perform] stopped to the end of the motion. */
+    suspend fun finish(durationMillis: Int) {
+        motion?.let { time.animateTo(it.end, tween(durationMillis, easing = LinearEasing)) }
+    }
+
+    /** Plays a [Ragdoll] or [Moves.getUp] in real time; their time is in seconds. */
+    suspend fun perform(motion: Motion) = perform(motion, (motion.end * 1000).roundToInt())
+
     suspend fun reset(hp: Int) {
-        move = null
+        motion = null
         this.hp.snapTo(hp.toFloat())
         chip.snapTo(hp.toFloat())
         flash.snapTo(0f)
@@ -332,10 +359,15 @@ private class Actor(hp: Int) {
 
 /**
  * @param strike where the fist or foot landed, relative to the attacker; null for a miss.
+ * @param label floats up over the defender; null for the quick blows of a combo.
  */
-private class Impact(val attacker: Side, val strike: Vec?, val label: String, val color: Color)
+private class Impact(val attacker: Side, val strike: Vec?, val label: String?, val color: Color = Color.White)
 
-/** Plays each [TurnResult] out on screen, then lets the next player attack. */
+/**
+ * Plays each [TurnResult] out on screen, then lets the next player attack. A hit is a combo of
+ * quick blows ending in a finisher that sends the defender flying; they land as a [Ragdoll] and
+ * get back up, unless it was the knockout. A miss is the finisher, swayed out of the way.
+ */
 private class BattleAnimation(start: BattleState) {
     private val left = Actor(start.left.hp)
     private val right = Actor(start.right.hp)
@@ -344,6 +376,9 @@ private class BattleAnimation(start: BattleState) {
     var busy by mutableStateOf(false)
     var impact by mutableStateOf<Impact?>(null)
     val impactTime = Animatable(0f)
+    /** Blows landed so far in this attack, for the combo counter. */
+    var hits by mutableStateOf(0)
+    val shake = Animatable(0f)
 
     fun actor(side: Side) = if (side == Side.LEFT) left else right
 
@@ -353,63 +388,99 @@ private class BattleAnimation(start: BattleState) {
             // A new battle or a rematch.
             busy = false
             impact = null
+            hits = 0
             left.reset(state.left.hp)
             right.reset(state.right.hp)
             return
         }
         busy = true
+        hits = 0
         val attacker = actor(last.attacker)
         val defender = actor(last.attacker.other)
         val hpLeft = state.fighter(last.attacker.other).hp.toFloat()
-        // Each player alternates punch, kick, punch...; the ×2 bonus always gets the big kick.
-        val kick = last.timingBonus || ((state.turnNumber - 2) / 2) % 2 == 1
-        val move = if (kick) Moves.kick else Moves.punch
+        // Each player alternates uppercut, roundhouse...; the ×2 bonus always gets the roundhouse.
+        val finisher =
+            if (last.timingBonus || ((state.turnNumber - 2) / 2) % 2 == 1) Moves.roundhouse else Moves.uppercut
+        // Two quick blows, one more for each of a critical and the ×2 bonus.
+        val blows = 2 + (if (last.critical) 1 else 0) + (if (last.timingBonus) 1 else 0)
 
         coroutineScope {
-            if (!last.hit) launch { defender.perform(Moves.dodge, durationMillis = 550) }
-            attacker.perform(move, durationMillis = STRIKE_MILLIS, until = move.impact)
+            attacker.perform(Moves.stepIn, STEP_MILLIS)
 
-            launch { attacker.time.animateTo(move.end, tween(RECOVER_MILLIS, easing = LinearEasing)) }
-            impact = if (last.hit) {
+            if (!last.hit) {
+                launch {
+                    delay((FINISHER_MILLIS - DODGE_PEAK_MILLIS).toLong())
+                    defender.perform(Moves.dodge, DODGE_MILLIS)
+                }
+                attacker.perform(finisher.move, FINISHER_MILLIS, until = finisher.move.impact)
+                land(Impact(last.attacker, null, "MISS"))
+                attacker.finish(FOLLOW_MILLIS)
+                return@coroutineScope
+            }
+
+            // The quick blows take a share of the damage each; the finisher takes the rest.
+            val share = (defender.hp.value - hpLeft) * BLOW_SHARE
+            for (i in 0 until blows) {
+                val blow = Moves.combo[(state.turnNumber + i) % Moves.combo.size]
+                attacker.perform(blow.move, BLOW_MILLIS, until = blow.move.impact)
+                land(Impact(last.attacker, blow.point, null))
+                launch { defender.flash.snapTo(0.6f); defender.flash.animateTo(0f, tween(150)) }
+                launch { defender.hp.animateTo(defender.hp.targetValue - share, tween(120)) }
+                launch { defender.perform(Moves.flinch, FLINCH_MILLIS) }
+                attacker.finish(BLOW_MILLIS)
+            }
+
+            attacker.perform(finisher.move, FINISHER_MILLIS, until = finisher.move.impact)
+            land(
                 Impact(
                     last.attacker,
-                    Moves.strikePoint(kick),
+                    finisher.point,
                     "-${last.damage}" + if (last.critical) "  CRITICAL!" else "",
                     if (last.critical) Color(0xFFFF7043) else Color(0xFFFFD600),
-                )
-            } else {
-                Impact(last.attacker, null, "MISS", Color.White)
-            }
-            launch {
-                impactTime.snapTo(0f)
-                impactTime.animateTo(1f, tween(900, easing = LinearEasing))
-            }
-            if (last.hit) {
-                launch {
-                    defender.flash.snapTo(1f)
-                    defender.flash.animateTo(0f, tween(250))
-                }
-                launch { defender.hp.animateTo(hpLeft, tween(250)) }
-                launch { defender.chip.animateTo(hpLeft, tween(500, delayMillis = 450)) }
-                if (state.winner != null) {
-                    defender.perform(Moves.knockout, durationMillis = 900)
-                } else {
-                    defender.perform(Moves.hit, durationMillis = 550)
-                }
-            }
+                ),
+            )
+            launch { defender.flash.snapTo(1f); defender.flash.animateTo(0f, tween(300)) }
+            launch { defender.hp.animateTo(hpLeft, tween(250)) }
+            launch { defender.chip.animateTo(hpLeft, tween(500, delayMillis = 450)) }
+            launch { shake.snapTo(1f); shake.animateTo(0f, tween(400)) }
+            // A moment's freeze on the big hit, then they fly.
+            val ragdoll = Ragdoll(defender.skeleton(0f), finisher.launch!!)
+            delay(HITSTOP_MILLIS)
+            launch { attacker.finish(FOLLOW_MILLIS) }
+            defender.perform(ragdoll)
+            if (state.winner == null) defender.perform(Moves.getUp(ragdoll.rest))
         }
 
         if (state.winner == null) {
-            attacker.move = null
-            defender.move = null
+            attacker.motion = null
+            defender.motion = null
         } else {
             attacker.perform(Moves.victory, durationMillis = 400)
         }
         busy = false
     }
 
+    /** Shows a blow landing (or missing) and counts it. */
+    private fun CoroutineScope.land(impact: Impact) {
+        this@BattleAnimation.impact = impact
+        if (impact.strike != null) hits++
+        launch {
+            impactTime.snapTo(0f)
+            impactTime.animateTo(1f, tween(900, easing = LinearEasing))
+        }
+    }
+
     companion object {
-        const val STRIKE_MILLIS = 280
-        const val RECOVER_MILLIS = 450
+        const val STEP_MILLIS = 150
+        /** Wind-up to impact, and impact back to the stance, for each quick blow. */
+        const val BLOW_MILLIS = 150
+        const val FLINCH_MILLIS = 300
+        const val BLOW_SHARE = 0.12f
+        const val FINISHER_MILLIS = 380
+        const val HITSTOP_MILLIS = 110L
+        const val FOLLOW_MILLIS = 700
+        const val DODGE_MILLIS = 550
+        /** When the dodge leans furthest back, so it lines up with the finisher. */
+        const val DODGE_PEAK_MILLIS = 220
     }
 }

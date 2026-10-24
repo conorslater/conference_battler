@@ -7,12 +7,13 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.lerp
 import dev.conferencebattler.ui.fighter.Skeleton.Companion.HEAD_RADIUS
+import dev.conferencebattler.ui.fighter.Skeleton.Companion.SHOE
 import dev.conferencebattler.ui.fighter.Skeleton.Companion.TORSO
 import kotlin.math.abs
 import kotlin.math.atan2
+import kotlin.math.max
 
 private const val LEG_WIDTH = 0.075f
 private const val ARM_WIDTH = 0.06f
@@ -71,34 +72,33 @@ internal class FigurePen(
 internal fun badgeCentre(sk: Skeleton, up: Vec, fwd: Vec) = sk.neck - up * 0.13f + fwd * 0.055f
 
 /**
- * Draws a side-on fighter in [look], posed as [pose], with their [Look.gear] worn or held.
+ * Draws a side-on fighter in [look], posed as [sk], with their [Look.gear] worn or held.
  *
  * @param origin the fighter's starting point on the floor, in pixels.
  * @param height one figure height in pixels.
  * @param facing 1 to face right, -1 to face left.
  * @param flash 0..1 whitens the figure, for the frame they get hit.
  */
-fun DrawScope.drawFighter(look: Look, pose: Pose, origin: Offset, height: Float, facing: Float, flash: Float = 0f) {
-    val sk = Skeleton(pose)
+fun DrawScope.drawFighter(look: Look, sk: Skeleton, origin: Offset, height: Float, facing: Float, flash: Float = 0f) {
     val pen = FigurePen(this, origin, height, facing, flash)
     val gear = look.gear
     val dressed = gear?.let { wearing(look, it) } ?: look
 
-    // Shadow stays on the floor however the fighter moves.
-    val floor = pen.p(sk.pivot)
+    // Shadow stays on the floor below the hip, shrinking while the fighter is in the air.
+    val floor = pen.p(Vec(sk.hip.x, 0f))
+    val airborne = sk.joints().minOf { it.y } - SHOE
+    val s = 1f / (1f + 1.5f * max(0f, airborne))
     drawOval(
-        Color.Black.copy(alpha = 0.3f),
-        topLeft = Offset(floor.x - 0.28f * height, floor.y - 0.03f * height),
-        size = Size(0.56f * height, 0.06f * height),
+        Color.Black.copy(alpha = 0.3f * s),
+        topLeft = Offset(floor.x - 0.28f * s * height, floor.y - 0.03f * s * height),
+        size = Size(0.56f * s * height, 0.06f * s * height),
     )
 
     // Torso axes: up along the spine, forward across it.
     val up = (sk.neck - sk.hip) * (1 / TORSO)
     val fwd = up.across
 
-    rotate(degrees = -facing * 85f * pose.fall, pivot = floor) {
-        with(pen) { drawBody(dressed, sk, up, fwd) }
-    }
+    with(pen) { drawBody(dressed, sk, up, fwd) }
 }
 
 private fun FigurePen.drawBody(look: Look, sk: Skeleton, up: Vec, fwd: Vec) {
